@@ -1,0 +1,219 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rjson)
+library(purrr)
+library(jsonlite)
+library(tidyverse)
+library(tidytext)
+library(knitr)
+library(scales)
+library(janeaustenr)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(tidyr)
+library(faraway)
+library(lattice)
+library(lme4)
+library(Metrics)
+library(pec)
+library(caret)
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+yelp.review<- stream_in(file("/project/mssphw1/yelpmssp/review.json"),verbose = F)
+yelp.review<-flatten(yelp.review)
+yelp.business<- stream_in(file("/project/mssphw1/yelpmssp/business.json"),verbose = F)
+
+business.inf<-yelp.business%>% dplyr::select('business_id', 'state')
+```
+
+```{r}
+yelp.review<-merge(yelp.review,business.inf,'business_id')
+```
+
+```{r}
+review.top<-subset(yelp.review,yelp.review$stars>=4)
+review.low<-subset(yelp.review,yelp.review$stars<=2)
+```
+
+```{r}
+
+
+users.review.top<-tibble(useful = review.top$useful,text = review.top$text)
+users.review.top$text<-as.character(users.review.top$text)
+top.samp<-users.review.top[sample(nrow(users.review.top), 20000, replace=FALSE),]
+
+
+Count.bigrams <-top.samp %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2)  %>%
+  separate(bigram, c("word1", "word2"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>%
+  count(word1, word2, sort = TRUE)
+
+united.top.review <- Count.bigrams %>%
+  unite(bigram, word1, word2, sep = " ")
+```
+
+```{r}
+united.top.review %>%
+  filter(n > 300) %>%
+  mutate(bigram = reorder(bigram, n)) %>%
+  ggplot(aes(bigram, n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip()
+```
+
+
+
+```{r}
+
+users.review.low<-tibble(useful = review.low$useful,text = review.low$text)
+users.review.low$text<-as.character(users.review.low$text)
+low.samp<-users.review.low[sample(nrow(users.review.low), 20000, replace=FALSE),]
+```
+
+```{r}
+united.low.review <-low.samp%>%
+  unnest_tokens(trigram, text, token = "ngrams", n = 3) %>%
+  separate(trigram, c("word1", "word2", "word3"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word,
+         !word3 %in% stop_words$word) %>%
+  count(word1, word2, word3, sort = TRUE) %>%
+  unite(trigram, word1, word2,word3, sep = " ")
+```
+
+```{r}
+united.low.review %>%
+  filter(n > 40) %>%
+  mutate(trigram = reorder(trigram, n)) %>%
+  ggplot(aes(trigram, n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip()
+```
+
+
+
+
+How to write a useful review
+```{r}
+phrase.1<-rep(0,nrow(yelp.review))
+phrase.2<-rep(0,nrow(yelp.review))
+phrase.3<-rep(0,nrow(yelp.review))
+phrase.4<-rep(0,nrow(yelp.review))
+phrase.1<-str_count(yelp.review$text,"highly recommend")  
+phrase.2<-str_count(yelp.review$text,"customer service") 
+phrase.3<-str_count(yelp.review$text,"hours") 
+phrase.4<-str_count(yelp.review$text,"minutes") 
+yelp.review$num_phrase<-phrase.1+phrase.2+phrase.3+phrase.4
+
+```
+
+
+
+```{r}
+yelp.review%>%count(state, sort = T)
+yelp.review<-yelp.review %>% 
+  filter(!grepl("NJ", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("VT", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("XWY", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("AK", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("AR", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("BAS", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("DOW", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("UT", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("BC", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("CON", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("DUR", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("TN", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("XGL", state))
+
+yelp.review<-yelp.review %>% 
+  filter(!grepl("WA", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("CT", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("VA", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("GA", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("NM", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("XGM", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("AL", state))
+yelp.review<-yelp.review %>% 
+  filter(!grepl("NE", state))
+```
+
+```{r}
+train.re<-yelp.review[1:300000,]
+test.re<-yelp.review[300000:600000,]
+
+```
+
+```{r}
+ggplot(train.re, aes(x = useful)) +
+  geom_histogram(aes(color = state, fill = state), 
+                position = "identity", bins = 30, alpha = 0.4)
+```
+
+
+
+```{r}
+review.mod<-lmer (useful ~  funny + cool + num_phrase + (1 | state), data = train.re)
+summary(review.mod)
+AIC(review.mod)
+
+```
+
+
+```{r}
+train.re$resid.re<-resid(review.mod)
+plot(train.re$useful,train.re$resid.re ,ylab="Standardized Residuals", xlab="Useful" )
+abline(0,0,col="blue")
+```
+
+```{r}
+qqnorm(train.re$resid.re, pch = 1, frame = FALSE)
+qqline(train.re$resid.re, col = "steelblue", lwd = 2)
+
+```
+
+
+```{r}
+coef(review.mod)
+```
+
+```{r}
+predictions <- review.mod %>% predict(test.re)
+RMSE(predictions, test.re$useful)
+MAE(predictions, test.re$useful)
+```
+
+
+
+
+

@@ -1,0 +1,379 @@
+---
+title: "Business.analysis"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(stringr)
+library(rjson)
+library(purrr)
+library(jsonlite)
+require(ggplot2)
+require(GGally)
+require(reshape2)
+require(lme4)
+require(compiler)
+require(parallel)
+require(boot)
+require(lattice)
+library(arm)
+library(alr3)
+library(caTools)
+library(InformationValue)
+library(GGally)
+```
+
+```{r}
+yelp.business<- stream_in(file("/project/mssphw1/yelpmssp/business.json"),verbose = F)
+yelp.photo<-stream_in(file("/project/mssphw1/yelpmssp/photo.json"),verbose = F)
+yelp.photo<-flatten(yelp.photo)
+business<-left_join(yelp.business, yelp.photo, by = "business_id")
+attributes<-yelp.business$attributes    
+hours<-yelp.business$hours
+
+```
+
+```{r}
+###0<- business hasn't photo on yelp,1<- business has photo on yelp
+business$has.photo[is.na(business$photo_id)==TRUE]<-0
+business$has.photo[is.na(business$photo_id)==FALSE]<-1
+business$has.photo<-as.factor(business$has.photo)
+### 0 the business does not have photo, 1 the business has photo but is does not include caption, 2 the business has photo with caption 
+business$has.caption<-rep(2,nrow(business))
+business$has.caption[is.na(business$caption)==TRUE]<-0
+business$has.caption[business$caption==""]<-1
+business$has.caption<-as.factor(business$has.caption)
+
+```
+
+
+
+
+```{r}
+Mon.s<-rep('',nrow(hours))
+Mon.e<-rep('',nrow(hours))
+Tue.s<-rep('',nrow(hours))
+Tue.e<-rep('',nrow(hours))
+Wed.s<-rep('',nrow(hours))
+Wed.e<-rep('',nrow(hours))
+Thu.s<-rep('',nrow(hours))
+Thu.e<-rep('',nrow(hours))
+Fri.s<-rep('',nrow(hours))
+Fri.e<-rep('',nrow(hours))
+Sat.s<-rep('',nrow(hours))
+Sat.e<-rep('',nrow(hours))
+Sun.s<-rep('',nrow(hours))
+Sun.e<-rep('',nrow(hours))
+```
+
+```{r}
+
+for(i in 1: nrow(hours)){
+  Mon.s[i]<-strsplit(hours$Monday[i], "[-]")[[1]][1]
+  Mon.e[i]<-strsplit(hours$Monday[i], "[-]")[[1]][2]
+}
+
+for(i in 1: nrow(hours)){
+  Tue.s[i]<-strsplit(hours$Tuesday[i], "[-]")[[1]][1]
+  Tue.e[i]<-strsplit(hours$Tuesday[i], "[-]")[[1]][2]
+}
+
+for(i in 1: nrow(hours)){
+  Wed.s[i]<-strsplit(hours$Wednesday[i], "[-]")[[1]][1]
+  Wed.e[i]<-strsplit(hours$Wednesday[i], "[-]")[[1]][2]
+}
+
+for(i in 1: nrow(hours)){
+  Thu.s[i]<-strsplit(hours$Thursday[i], "[-]")[[1]][1]
+  Thu.e[i]<-strsplit(hours$Thursday[i], "[-]")[[1]][2]
+}
+
+for(i in 1: nrow(hours)){
+  Fri.s[i]<-strsplit(hours$Friday[i], "[-]")[[1]][1]
+  Fri.e[i]<-strsplit(hours$Friday[i], "[-]")[[1]][2]
+}
+
+for(i in 1: nrow(hours)){
+  Sat.s[i]<-strsplit(hours$Saturday[i], "[-]")[[1]][1]
+  Sat.e[i]<-strsplit(hours$Saturday[i], "[-]")[[1]][2]
+}
+
+for(i in 1: nrow(hours)){
+  Sun.s[i]<-strsplit(hours$Sunday[i], "[-]")[[1]][1]
+  Sun.e[i]<-strsplit(hours$Sunday[i], "[-]")[[1]][2]
+}
+
+```
+
+
+
+
+```{r}
+###creat a function to get the start time and end time.  Using star time to subtract end time,
+##I can get working hour
+
+getTime =  function(weekday){
+  time<-rep(0,nrow(hours))
+  for(i in 1 : nrow(hours) ){
+  if(!is.null(weekday[i])){
+    h<-strsplit(weekday[i] , "[:]")[[1]][1]
+    m<-strsplit(weekday[i] , "[:]")[[1]][1]
+    h<-as.numeric(h)
+    m<-as.numeric(m)
+    time[i]<-h+m/60
+  }else{
+    time[i]<-NA
+  }
+  }
+  return(time)
+}
+```
+
+
+
+
+```{r}
+Mon_s<-getTime(Mon.s)
+Mon_e<-getTime(Mon.e)
+Mon<-Mon_e-Mon_s
+Mon[Mon==0]<-24
+
+Tue_s<-getTime(Tue.s)
+Tue_e<-getTime(Tue.e)
+Tue<-Tue_e-Tue_s
+Tue[Tue==0]<-24
+
+Wed_s<-getTime(Wed.s)
+Wed_e<-getTime(Wed.e)
+Wed<-Wed_e-Wed_s
+Wed[Wed==0]<-24
+
+Thu_s<-getTime(Thu.s)
+Thu_e<-getTime(Thu.e)
+Thu<-Thu_e-Thu_s
+Thu[Thu==0]<-24
+
+Fri_s<-getTime(Fri.s)
+Fri_e<-getTime(Fri.e)
+Fri<-Fri_e-Fri_s
+Fri[Fri==0]<-24
+
+Sat_s<-getTime(Sat.s)
+Sat_e<-getTime(Sat.e)
+Sat<-Sat_e-Sat_s
+Sat[Sat==0]<-24
+
+Sun_s<-getTime(Sun.s)
+Sun_e<-getTime(Sun.e)
+Sun<-Sun_e-Sun_s
+Sun[Sun==0]<-24
+
+```
+
+
+```{r}
+branch.tab.h<-yelp.business%>%count(name,sort = TRUE)
+
+```
+
+
+
+```{r}
+Data.Star<-data.frame(yelp.business$review_count,yelp.business$state,yelp.business$name,yelp.business$stars,Mon,Tue,Wed,Thu,Fri,Sat,Sun)
+Data.Star<-na.omit(Data.Star)
+```
+
+
+
+
+
+
+```{r}
+
+Data.Star<-merge(Data.Star,branch.tab.h,by.x='yelp.business.name',by.y='name')
+colnames(Data.Star)[colnames(Data.Star)=="yelp.business.name"] <- "name"
+colnames(Data.Star)[colnames(Data.Star)=="n"] <- "Num_branch"
+Data.Star$Mon<-ifelse(Data.Star$Mon<0,Data.Star$Mon+24,Data.Star$Mon)
+Data.Star$Tue<-ifelse(Data.Star$Tue<0,Data.Star$Tue+24,Data.Star$Tue)
+Data.Star$Wed<-ifelse(Data.Star$Wed<0,Data.Star$Wed+24,Data.Star$Wed)
+Data.Star$Thu<-ifelse(Data.Star$Thu<0,Data.Star$Thu+24,Data.Star$Thu)
+Data.Star$Fri<-ifelse(Data.Star$Fri<0,Data.Star$Fri+24,Data.Star$Fri)
+Data.Star$Sat<-ifelse(Data.Star$Sat<0,Data.Star$Sat+24,Data.Star$Sat)
+Data.Star$Sun<-ifelse(Data.Star$Sun<0,Data.Star$Sun+24,Data.Star$Sun)
+Data.Star$yelp.business.stars<-as.numeric(Data.Star$yelp.business.stars)
+Data.Star$is.High[Data.Star$yelp.business.stars>=4]<-1
+Data.Star$is.High[Data.Star$yelp.business.stars<4]<-0
+Data.Star$is.High<-as.factor(Data.Star$is.High)
+```
+
+```{r}
+X<-Data.Star[,5:11]
+
+ggpairs(X)
+```
+
+
+
+```{r}
+Data.Star$Mean.Hours <- rowSums( Data.Star[,5:11] )/7
+```
+
+
+```{r}
+Data.Star%>%count(yelp.business.state)
+Data.Star.C<-Data.Star %>% 
+  filter(!grepl("AL", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("CA", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("CT", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("GA", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("NE", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("AR", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("BC", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("FL", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("NJ", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("NM", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("TN", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("VA", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("VT", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("WA", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("TX", yelp.business.state))
+Data.Star.C<-Data.Star.C %>% 
+  filter(!grepl("XGM", yelp.business.state))
+
+show.state<-Data.Star.C%>%count(yelp.business.state)
+head(show.state)
+```
+
+
+
+```{r}
+star.training<-Data.Star.C[1:40000,]
+star.testing<-Data.Star.C[40001:80000,]
+```
+
+```{r}
+ggplot(Data.Star.C, aes(x = yelp.business.stars)) +
+  geom_histogram(aes(color = yelp.business.state, fill = yelp.business.state), 
+                position = "identity", bins = 30, alpha = 0.4)
+
+```
+
+
+
+
+```{r}
+Data.Star.C$Mean.Hours.z<-(Data.Star.C$Mean.Hours-mean(Data.Star.C$Mean.Hours))/sd(Data.Star.C$Mean.Hours)
+star.training<-Data.Star.C[1:40000,]
+star.testing<-Data.Star.C[40001:80000,]
+```
+
+
+
+```{r}
+
+Stars.mod <- glmer(formula = is.High ~ Mean.Hours.z + Num_branch +
+    (1  | yelp.business.state), data = star.training, family = binomial(link = "logit"))
+summary(Stars.mod)
+```
+
+```{r}
+binnedplot(fitted(Stars.mod),residuals(Stars.mod,type="response"))
+```
+
+```{r}
+predicted<-predict(Stars.mod, newdata = star.testing)
+range(predicted)
+thresholds<-0.4
+confusionMatrix(star.testing$is.High, predicted, threshold = thresholds)
+```
+
+
+```{r}
+coef(Stars.mod)
+```
+
+
+```{r}
+branch.tab<-business %>%count(name)
+business<-merge(business,branch.tab,'name')
+names(business)[names(business) == "n"] <- "Branch"
+```
+
+```{r}
+
+getUSR<-str_count(business$categories, pattern = "American|Restaurants")
+
+
+business$isAmericanR<-ifelse(getUSR>=2,business$isAmericanR<-1,business$isAmericanR<-0)
+business$is.High[business$stars>=4]<-1
+business$is.High[business$stars<4]<-0
+business.A<-subset(business, isAmericanR==1)
+```
+
+```{r}
+business.A<-business.A %>% 
+  filter(!grepl("FL", state))
+business.A<-business.A %>% 
+  filter(!grepl("NM", state))
+business.A<-business.A %>% 
+  filter(!grepl("NY", state))
+business.A<-business.A %>% 
+  filter(!grepl("VA", state))
+```
+
+
+
+
+```{r}
+ggplot(business.A, aes(x = stars)) +
+  geom_histogram(aes(color = state, fill = state), 
+                position = "identity", bins = 30, alpha = 0.4)
+```
+
+
+```{r}
+train<-sample.split(business.A$is.High,SplitRatio = 0.65 )
+train.A<-subset(business.A, train == T)
+test.A<-subset(business.A, train == F)
+```
+
+```{r}
+mod.A<-glmer(is.High~ Branch + review_count + has.photo + (1 | state), data = train.A, family = binomial)
+summary(mod.A)
+```
+
+```{r}
+coef(mod.A)
+```
+
+
+```{r}
+binnedplot(fitted(mod.A),residuals(mod.A,type="response"))
+```
+
+```{r}
+predicted.A<-predict(mod.A, newdata = train.A,type = 'response' )
+
+
+confusionMatrix(train.A$is.High, predicted.A, threshold = 0.5)
+-8.072e-01
+```
+
